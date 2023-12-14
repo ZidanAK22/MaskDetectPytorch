@@ -116,17 +116,20 @@ class PascalVOCDataset(Dataset):
         return seg_mask
 
     def extract_lbp_features(self, image):
-        # Convert the image to grayscale
+        # Convert the image to numpy array
         image_array = np.array(image)
 
-        # np.transpose(image_array, (1,2,0)).shape
-        
-        print(image_array.shape)
+        # Ensure correct channel order (transpose from CHW to HWC)
+        image_array = image_array.transpose((1, 2, 0))
 
+        # Check if the image is grayscale (single channel)
+        if len(image_array.shape) == 2:
+            # Add a third channel to make it compatible with rgb2gray
+            image_array = np.expand_dims(image_array, axis=-1)
+
+        # Convert RGB to grayscale
         gray_image = color.rgb2gray(image_array)
 
-        print(gray_image.shape())    
-        
         # Compute Local Binary Pattern (LBP)
         lbp_radius = 1
         lbp_points = 8 * lbp_radius
@@ -135,19 +138,46 @@ class PascalVOCDataset(Dataset):
         # Compute histogram of LBP
         hist, _ = np.histogram(lbp.ravel(), bins=np.arange(0, lbp.max() + 1), density=True)
 
-        return hist        
-
-# Define data directory and instantiate the dataset
+        return hist       
+    
 data_dir = 'D:/Ngodink/Python/Pytorchic/MasksDetect/ds_masks'  # Update with your dataset path
 
-transform = transforms.Compose([
+# Define a placeholder dataset for accessing the felzenszwalb_segmentation method
+placeholder_dataset = PascalVOCDataset(data_dir=data_dir)
+
+# Transformation for Felzenszwalb segmentation
+felzenszwalb_transform = transforms.Compose([
+    transforms.Lambda(lambda x: (transforms.ToTensor()(x),)),
+    transforms.Lambda(lambda x: (x[0], placeholder_dataset.felzenszwalb_segmentation(x[0]))),
+])
+
+
+
+# Transformation for LBP feature extraction
+lbp_transform = transforms.Compose([
     transforms.ToTensor(),
     transforms.RandomHorizontalFlip(),
 ])
 
-dataset = PascalVOCDataset(data_dir=data_dir, transform=transform, segmentation=True)
+# Create datasets with different transformations
+dataset_felzenszwalb = PascalVOCDataset(data_dir=data_dir, transform=felzenszwalb_transform)
+dataset_lbp = PascalVOCDataset(data_dir=data_dir, transform=lbp_transform, feature_extraction=True)
 
-dataset_lbp = PascalVOCDataset(data_dir=data_dir, transform=transform, feature_extraction=True)
+# Access the Felzenszwalb segmentation mask for a specific image
+sample_idx_felzenszwalb = 0
+image_felzenszwalb, annotation_felzenszwalb = dataset_felzenszwalb[sample_idx_felzenszwalb]
+image_felzenszwalb, seg_mask_felzenszwalb = image_felzenszwalb
+
+# Plot the original image and Felzenszwalb segmentation mask
+plt.subplot(1, 2, 1)
+plt.imshow(np.array(image_felzenszwalb.permute(1, 2, 0)))
+plt.title("Original Image")
+
+plt.subplot(1, 2, 2)
+plt.imshow(seg_mask_felzenszwalb, cmap='viridis')
+plt.title("Felzenszwalb Segmentation Mask")
+
+plt.show()
 
 # Access the LBP features for a specific image
 sample_idx_lbp = 0
@@ -163,23 +193,3 @@ plt.bar(range(len(lbp_features)), lbp_features)
 plt.title("LBP Features")
 
 plt.show()
-
-
-
-# Jika segmentation
-# dataset = PascalVOCDataset(data_dir=data_dir, transform=transform, segmentation=True)
-
-# # Access the segmentation mask for a specific image
-# sample_idx = 0
-# image, seg_mask, annotation = dataset[sample_idx]
-
-# # Plot the original image and segmentation mask
-# plt.subplot(1, 2, 1)
-# plt.imshow(np.array(image.permute(1, 2, 0)))
-# plt.title("Original Image")
-
-# plt.subplot(1, 2, 2)
-# plt.imshow(seg_mask, cmap='viridis')
-# plt.title("Segmentation Mask")
-
-# plt.show()
